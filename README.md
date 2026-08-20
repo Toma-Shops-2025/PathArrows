@@ -14,16 +14,18 @@ Tap an arrow only when nothing is blocking the direction it points. Clear the bo
 
 https://github.com/myviralsnap-hash/PathArrows
 
-## Play Store / legal URLs (after Netlify deploy)
+## Play Store / legal URLs (live)
 
-Once the Netlify site is live (example base `https://patharrows.netlify.app`):
+Base: https://myviralsnap-hash.github.io/PathArrows/
 
 | Purpose | URL |
 |--------|-----|
-| Privacy | `/privacy` or `/privacy.html` |
-| Terms | `/terms` or `/terms.html` |
-| Data / account deletion | `/account-deletion` or `/delete-account` |
-| app-ads.txt | `/app-ads.txt` |
+| Privacy | https://myviralsnap-hash.github.io/PathArrows/privacy.html |
+| Terms | https://myviralsnap-hash.github.io/PathArrows/terms.html |
+| Data / account deletion | https://myviralsnap-hash.github.io/PathArrows/account-deletion.html |
+| app-ads.txt | https://myviralsnap-hash.github.io/PathArrows/app-ads.txt |
+
+Netlify is optional for the full game site; these GitHub Pages links already work for Play Console.
 
 ## Monetize (Unity Ads)
 
