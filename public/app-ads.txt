@@ -1,4 +1,4 @@
-ownerdomain=patharrows.netlify.app
+ownerdomain=myviralsnap-hash.github.io
 connekt.ai, 5585919044, RESELLER
 conversantmedia.com, 41024, RESELLER, 03113cd04947736d
 spinx.biz, 1373698903, RESELLER, 9f2711e9aaa9f992
