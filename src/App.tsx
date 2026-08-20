@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Heart, Lightbulb, RotateCcw, Settings, ChevronLeft, Send } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
 import { LEVELS } from '@/lib/levels';
-import { cellsOf, firstHint, isClear, pickArrowAt, slideWindow, unwindTrack, type Arrow } from '@/lib/engine';
+import { cellsOf, firstHint, isClear, pickArrowAt, unwindSlice, unwindTrack, type Arrow } from '@/lib/engine';
 import { initAds, setBannerVisible, showInterstitial, showRewardedAd } from '@/lib/ads';
 import { ArrowPaths } from '@/components/ArrowPaths';
 import { acquireBgm, resumeBgm } from '@/lib/bgm';
@@ -41,7 +41,11 @@ export default function App() {
   const [hintId, setHintId] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [unlocked, setUnlocked] = useState(saved.unlocked);
-  const [motion, setMotion] = useState<{ id: number; cells: { x: number; y: number }[] } | null>(null);
+  const [motion, setMotion] = useState<{
+    id: number;
+    arrow: Arrow;
+    cells: { x: number; y: number }[];
+  } | null>(null);
   const [splash, setSplash] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const winsRef = useRef(0);
@@ -108,14 +112,16 @@ export default function App() {
 
       setHintId(null);
       const body = cellsOf(arrow);
-      const track = unwindTrack(arrow);
-      const extra = track.length - body.length;
-      const duration = Math.min(1700, Math.max(520, body.length * 95));
+      const track = unwindTrack(arrow, level.cols, level.rows);
+      // Longer for long snakes; always long enough to see the sliver leave the board.
+      const duration = Math.min(2200, Math.max(700, body.length * 110 + Math.max(level.cols, level.rows) * 35));
       const start = performance.now();
       const session = motionSession.current + 1;
       motionSession.current = session;
       animatingRef.current = true;
-      setMotion({ id: arrow.id, cells: body.map((c) => ({ ...c })) });
+      // Remove from board immediately; keep a snapshot so motion can render without arrows.find().
+      setArrows(others);
+      setMotion({ id: arrow.id, arrow, cells: body.map((c) => ({ ...c })) });
 
       const finish = () => {
         if (session !== motionSession.current) return;
@@ -129,7 +135,6 @@ export default function App() {
           motionSafety.current = null;
         }
         setMotion(null);
-        setArrows(others);
         if (others.length === 0) {
           const nextUnlocked = Math.max(unlocked, levelIndex + 2);
           setUnlocked(Math.min(nextUnlocked, LEVELS.length));
@@ -139,13 +144,18 @@ export default function App() {
         }
       };
 
-      motionSafety.current = window.setTimeout(finish, duration + 400);
+      motionSafety.current = window.setTimeout(finish, duration + 500);
 
       const tick = (now: number) => {
         if (session !== motionSession.current) return;
         const t = Math.min(1, (now - start) / duration);
-        const eased = 1 - (1 - t) * (1 - t);
-        setMotion({ id: arrow.id, cells: slideWindow(track, body.length, eased * extra) });
+        // Ease-in-out so the leave doesn't look like a pop/fade.
+        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        setMotion({
+          id: arrow.id,
+          arrow,
+          cells: unwindSlice(track, body.length, eased),
+        });
         if (t < 1) {
           motionFrame.current = requestAnimationFrame(tick);
           return;
@@ -264,7 +274,7 @@ export default function App() {
             </span>
           </div>
 
-          <div className="w-full max-w-[min(96vw,44rem)] px-3 mt-4">
+          <div className="w-full max-w-[min(96vw,44rem)] px-3 mt-4 overflow-visible">
             <Board
               cols={level.cols}
               rows={level.rows}
@@ -377,7 +387,7 @@ function Board({
   rows: number;
   arrows: Arrow[];
   hintId: number | null;
-  motion: { id: number; cells: { x: number; y: number }[] } | null;
+  motion: { id: number; arrow: Arrow; cells: { x: number; y: number }[] } | null;
   animatingRef: MutableRefObject<boolean>;
   onTap: (arrow: Arrow) => void;
 }) {
@@ -419,7 +429,7 @@ function Board({
     <div className="relative bg-white rounded-[1.75rem] shadow-md mx-auto p-2 sm:p-3 w-full max-w-[min(96vw,44rem)] overflow-visible">
       <div
         ref={wrapRef}
-        className="relative w-full touch-manipulation cursor-pointer select-none"
+        className="relative w-full touch-manipulation cursor-pointer select-none overflow-visible"
         style={{ aspectRatio: `${cols} / ${rows}`, touchAction: 'manipulation' }}
         onPointerUp={handlePointerUp}
       >

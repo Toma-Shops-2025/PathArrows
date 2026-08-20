@@ -36,7 +36,8 @@ function renderArrowPath(
   cell: number,
   stroke: number,
   head: number,
-  hinted: boolean
+  hinted: boolean,
+  key?: string | number
 ) {
   if (cells.length < 1) return null;
   const color = hinted ? HINT : INK;
@@ -54,7 +55,7 @@ function renderArrowPath(
       : trimPathForHead(cells, cell, arrow.dir);
 
   return (
-    <g key={arrow.id}>
+    <g key={key ?? arrow.id}>
       <path d={d} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" />
       <polygon
         points={`${head * 0.55},0 ${-head * 0.34},${-head * 0.38} ${-head * 0.34},${head * 0.38}`}
@@ -66,6 +67,8 @@ function renderArrowPath(
 }
 
 export function ArrowPaths({
+  cols,
+  rows,
   cell,
   arrows,
   hintId,
@@ -76,21 +79,31 @@ export function ArrowPaths({
   cell: number;
   arrows: Arrow[];
   hintId: number | null;
-  motion: { id: number; cells: { x: number; y: number }[] } | null;
+  motion: { id: number; arrow: Arrow; cells: { x: number; y: number }[] } | null;
 }) {
   const stroke = Math.max(4, cell * 0.22);
   const head = cell * 0.48;
+  // Extra SVG margin so arrows stay visible while they sliver off every edge.
+  const pad = cell * 3;
+  const width = cols * cell;
+  const height = rows * cell;
 
   return (
-    <svg className="absolute inset-0 w-full h-full overflow-visible pointer-events-none" aria-hidden>
-      {arrows
-        .filter((arrow) => arrow.id !== motion?.id)
-        .map((arrow) => renderArrowPath(arrow, cellsOf(arrow), cell, stroke, head, hintId === arrow.id))}
-      {motion && (() => {
-        const arrow = arrows.find((a) => a.id === motion.id);
-        if (!arrow) return null;
-        return renderArrowPath(arrow, motion.cells, cell, stroke, head, hintId === arrow.id);
-      })()}
+    <svg
+      className="absolute pointer-events-none overflow-visible"
+      aria-hidden
+      width={width + pad * 2}
+      height={height + pad * 2}
+      style={{ left: -pad, top: -pad, overflow: 'visible' }}
+    >
+      <g transform={`translate(${pad}, ${pad})`}>
+        {arrows
+          .filter((arrow) => arrow.id !== motion?.id)
+          .map((arrow) => renderArrowPath(arrow, cellsOf(arrow), cell, stroke, head, hintId === arrow.id))}
+        {motion &&
+          motion.cells.length > 0 &&
+          renderArrowPath(motion.arrow, motion.cells, cell, stroke, head, hintId === motion.id, `motion-${motion.id}`)}
+      </g>
     </svg>
   );
 }

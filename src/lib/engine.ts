@@ -68,13 +68,16 @@ export function firstHint(arrows: Arrow[], cols: number, rows: number): number |
   return found ? found.id : null;
 }
 
-export function unwindTrack(arrow: Arrow): { x: number; y: number }[] {
+/** Body path + a long straight runway past the tip so the arrow can fully leave the board. */
+export function unwindTrack(arrow: Arrow, cols: number, rows: number): { x: number; y: number }[] {
   const body = cellsOf(arrow).map((c) => ({ ...c }));
   const { dx, dy } = D[arrow.dir];
-  const extra = body.length + 2;
-  let x = body[body.length - 1].x;
-  let y = body[body.length - 1].y;
-  for (let i = 0; i < extra; i++) {
+  const tip = body[body.length - 1];
+  // Runway long enough to clear the board from any tip position.
+  const runway = Math.max(cols, rows) + body.length + 2;
+  let x = tip.x;
+  let y = tip.y;
+  for (let i = 0; i < runway; i++) {
     x += dx;
     y += dy;
     body.push({ x, y });
@@ -82,15 +85,41 @@ export function unwindTrack(arrow: Arrow): { x: number; y: number }[] {
   return body;
 }
 
-export function slideWindow(
+/**
+ * Unwind / sliver: eat from the tail while the tip leads out the exit runway.
+ * progress 0 = full body on board, 1 = fully off.
+ */
+export function unwindSlice(
   track: { x: number; y: number }[],
-  length: number,
-  offset: number
+  bodyLength: number,
+  progress: number
 ): { x: number; y: number }[] {
-  const max = Math.max(0, track.length - 1);
+  if (track.length === 0) return [];
+  const p = Math.max(0, Math.min(1, progress));
+  const max = track.length - 1;
+  const bodyTip = Math.max(0, bodyLength - 1);
+
+  // Tip travels from end of body → end of runway.
+  const tip = bodyTip + p * (max - bodyTip);
+  // Tail catches up from 0 → tip so the ribbon shortens and leaves.
+  const tail = p * tip;
+
+  if (tip - tail < 0.08) {
+    const i0 = Math.min(Math.floor(tip), max);
+    const i1 = Math.min(i0 + 1, max);
+    const f = tip - Math.floor(tip);
+    const a = track[i0];
+    const b = track[i1];
+    const tipPt = { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f };
+    const backI = Math.max(0, i0 - 1);
+    return [track[backI], tipPt];
+  }
+
+  const span = tip - tail;
+  const samples = Math.max(2, Math.min(48, Math.ceil(span) + 2));
   const pts: { x: number; y: number }[] = [];
-  for (let i = 0; i < length; i++) {
-    const t = Math.min(offset + i, max);
+  for (let i = 0; i < samples; i++) {
+    const t = tail + (span * i) / (samples - 1);
     const i0 = Math.min(Math.floor(t), max);
     const i1 = Math.min(i0 + 1, max);
     const f = t - Math.floor(t);
