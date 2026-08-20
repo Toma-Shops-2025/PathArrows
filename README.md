@@ -1,4 +1,4 @@
-# Path Arrows
+﻿# Path Arrows
 
 Casual tap-to-clear arrow puzzle game.
 
@@ -12,20 +12,18 @@ Tap an arrow only when nothing is blocking the direction it points. Clear the bo
 
 ## Repo
 
-https://github.com/myviralsnap-hash/PathArrows
+https://github.com/Toma-Shops-2025/PathArrows
 
 ## Play Store / legal URLs (live)
 
-Base: https://myviralsnap-hash.github.io/PathArrows/
+Base: https://toma-shops-2025.github.io/PathArrows/
 
 | Purpose | URL |
 |--------|-----|
-| Privacy | https://myviralsnap-hash.github.io/PathArrows/privacy.html |
-| Terms | https://myviralsnap-hash.github.io/PathArrows/terms.html |
-| Data / account deletion | https://myviralsnap-hash.github.io/PathArrows/account-deletion.html |
-| app-ads.txt | https://myviralsnap-hash.github.io/PathArrows/app-ads.txt |
-
-Netlify is optional for the full game site; these GitHub Pages links already work for Play Console.
+| Privacy | https://toma-shops-2025.github.io/PathArrows/privacy.html |
+| Terms | https://toma-shops-2025.github.io/PathArrows/terms.html |
+| Data / account deletion | https://toma-shops-2025.github.io/PathArrows/account-deletion.html |
+| app-ads.txt | https://toma-shops-2025.github.io/PathArrows/app-ads.txt |
 
 ## Monetize (Unity Ads)
 
@@ -39,4 +37,3 @@ Ads in the game:
 - **Rewarded:** extra hints / refill lives
 - **Interstitial:** after every **3** level wins
 - **Banner:** bottom of the screen
-
