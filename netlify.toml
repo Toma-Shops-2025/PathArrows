@@ -1,0 +1,34 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/app-ads.txt"
+  to = "/app-ads.txt"
+  status = 200
+  force = true
+
+[[redirects]]
+  from = "/privacy"
+  to = "/privacy.html"
+  status = 200
+
+[[redirects]]
+  from = "/terms"
+  to = "/terms.html"
+  status = 200
+
+[[redirects]]
+  from = "/account-deletion"
+  to = "/account-deletion.html"
+  status = 200
+
+[[redirects]]
+  from = "/delete-account"
+  to = "/account-deletion.html"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
