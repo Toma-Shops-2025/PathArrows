@@ -7,8 +7,23 @@ Tap an arrow only when nothing is blocking the direction it points. Clear the bo
 - 30 original levels
 - 3 lives per level
 - Hints and extra lives via optional Unity rewarded ads
-- Interstitial ads after a win
+- Interstitial ads after every 3 wins
 - Package: `fun.patharrows`
+
+## Repo
+
+https://github.com/myviralsnap-hash/PathArrows
+
+## Play Store / legal URLs (after Netlify deploy)
+
+Once the Netlify site is live (example base `https://patharrows.netlify.app`):
+
+| Purpose | URL |
+|--------|-----|
+| Privacy | `/privacy` or `/privacy.html` |
+| Terms | `/terms` or `/terms.html` |
+| Data / account deletion | `/account-deletion` or `/delete-account` |
+| app-ads.txt | `/app-ads.txt` |
 
 ## Monetize (Unity Ads)
 
