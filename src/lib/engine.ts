@@ -116,7 +116,7 @@ export function unwindSlice(
   }
 
   const span = tip - tail;
-  const samples = Math.max(2, Math.min(48, Math.ceil(span) + 2));
+  const samples = Math.max(2, Math.min(24, Math.ceil(span) + 2));
   const pts: { x: number; y: number }[] = [];
   for (let i = 0; i < samples; i++) {
     const t = tail + (span * i) / (samples - 1);

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type MutableRefObject, type PointerEvent } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { Heart, Lightbulb, RotateCcw, Settings, ChevronLeft, Send } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
 import { LEVELS } from '@/lib/levels';
@@ -10,6 +11,8 @@ import { cn } from '@/lib/utils';
 
 const LIVES = 3;
 const STORAGE_KEY = 'patharrows-progress';
+/** Per-frame SVG unwind OOM/crashes Android WebView after a handful of clears. */
+const LITE_MOTION = Capacitor.isNativePlatform();
 
 function difficultyLabel(cols: number) {
   if (cols <= 10) return 'Easy';
@@ -72,8 +75,22 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    initAds().then(() => setBannerVisible(true)).catch(() => undefined);
+    initAds().catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    // Hide banner during play — Unity banner attach/resize mid-level crashes WebView on some phones.
+    if (screen === 'home') {
+      setBannerVisible(true).catch(() => undefined);
+    } else {
+      setBannerVisible(false).catch(() => undefined);
+    }
+  }, [screen]);
+
+  useEffect(() => {
+    document.body.classList.toggle('pa-playing', screen !== 'home');
+    return () => document.body.classList.remove('pa-playing');
+  }, [screen]);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ unlocked, hints }));
@@ -97,72 +114,96 @@ export default function App() {
 
   const tapArrow = useCallback(
     (arrow: Arrow) => {
-      if (screen !== 'play' || animatingRef.current) return;
-      const current = arrowsRef.current;
-      const others = current.filter((a) => a.id !== arrow.id);
-      if (!isClear(arrow, others, level.cols, level.rows)) {
-        const nextLives = lives - 1;
-        setLives(nextLives);
-        toast.error('Blocked — that path is not free');
-        if (nextLives <= 0) setScreen('lose');
-        return;
-      }
-      if (motionFrame.current != null) cancelAnimationFrame(motionFrame.current);
-      if (motionSafety.current != null) window.clearTimeout(motionSafety.current);
-
-      setHintId(null);
-      const body = cellsOf(arrow);
-      const track = unwindTrack(arrow, level.cols, level.rows);
-      // Longer for long snakes; always long enough to see the sliver leave the board.
-      const duration = Math.min(2200, Math.max(700, body.length * 110 + Math.max(level.cols, level.rows) * 35));
-      const start = performance.now();
-      const session = motionSession.current + 1;
-      motionSession.current = session;
-      animatingRef.current = true;
-      // Remove from board immediately; keep a snapshot so motion can render without arrows.find().
-      setArrows(others);
-      setMotion({ id: arrow.id, arrow, cells: body.map((c) => ({ ...c })) });
-
-      const finish = () => {
-        if (session !== motionSession.current) return;
-        animatingRef.current = false;
-        if (motionFrame.current != null) {
-          cancelAnimationFrame(motionFrame.current);
-          motionFrame.current = null;
-        }
-        if (motionSafety.current != null) {
-          window.clearTimeout(motionSafety.current);
-          motionSafety.current = null;
-        }
-        setMotion(null);
-        if (others.length === 0) {
-          const nextUnlocked = Math.max(unlocked, levelIndex + 2);
-          setUnlocked(Math.min(nextUnlocked, LEVELS.length));
-          setScreen('win');
-          winsRef.current += 1;
-          if (winsRef.current % 3 === 0) showInterstitial();
-        }
-      };
-
-      motionSafety.current = window.setTimeout(finish, duration + 500);
-
-      const tick = (now: number) => {
-        if (session !== motionSession.current) return;
-        const t = Math.min(1, (now - start) / duration);
-        // Ease-in-out so the leave doesn't look like a pop/fade.
-        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-        setMotion({
-          id: arrow.id,
-          arrow,
-          cells: unwindSlice(track, body.length, eased),
-        });
-        if (t < 1) {
-          motionFrame.current = requestAnimationFrame(tick);
+      try {
+        if (screen !== 'play' || animatingRef.current) return;
+        const current = arrowsRef.current;
+        const others = current.filter((a) => a.id !== arrow.id);
+        if (!isClear(arrow, others, level.cols, level.rows)) {
+          const nextLives = lives - 1;
+          setLives(nextLives);
+          toast.error('Blocked — that path is not free');
+          if (nextLives <= 0) setScreen('lose');
           return;
         }
-        finish();
-      };
-      motionFrame.current = requestAnimationFrame(tick);
+        if (motionFrame.current != null) cancelAnimationFrame(motionFrame.current);
+        if (motionSafety.current != null) window.clearTimeout(motionSafety.current);
+
+        setHintId(null);
+        const finishClear = () => {
+          animatingRef.current = false;
+          setMotion(null);
+          if (others.length === 0) {
+            const nextUnlocked = Math.max(unlocked, levelIndex + 2);
+            setUnlocked(Math.min(nextUnlocked, LEVELS.length));
+            setScreen('win');
+            winsRef.current += 1;
+            if (winsRef.current % 3 === 0) {
+              window.setTimeout(() => {
+                showInterstitial().catch(() => undefined);
+              }, 600);
+            }
+          }
+        };
+
+        // Native: instant clear — no RAF/SVG rebuild loop (that was crashing mid-level).
+        if (LITE_MOTION) {
+          animatingRef.current = true;
+          setArrows(others);
+          motionSafety.current = window.setTimeout(finishClear, 120);
+          return;
+        }
+
+        const body = cellsOf(arrow);
+        const track = unwindTrack(arrow, level.cols, level.rows);
+        const duration = Math.min(1400, Math.max(450, body.length * 70 + Math.max(level.cols, level.rows) * 22));
+        const start = performance.now();
+        const session = motionSession.current + 1;
+        motionSession.current = session;
+        animatingRef.current = true;
+        setArrows(others);
+        setMotion({ id: arrow.id, arrow, cells: body.map((c) => ({ ...c })) });
+
+        const finish = () => {
+          if (session !== motionSession.current) return;
+          if (motionFrame.current != null) {
+            cancelAnimationFrame(motionFrame.current);
+            motionFrame.current = null;
+          }
+          if (motionSafety.current != null) {
+            window.clearTimeout(motionSafety.current);
+            motionSafety.current = null;
+          }
+          finishClear();
+        };
+
+        motionSafety.current = window.setTimeout(finish, duration + 400);
+
+        let frame = 0;
+        const tick = (now: number) => {
+          if (session !== motionSession.current) return;
+          const t = Math.min(1, (now - start) / duration);
+          const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+          frame += 1;
+          if (frame % 3 === 0 || t >= 1) {
+            setMotion({
+              id: arrow.id,
+              arrow,
+              cells: unwindSlice(track, body.length, eased),
+            });
+          }
+          if (t < 1) {
+            motionFrame.current = requestAnimationFrame(tick);
+            return;
+          }
+          finish();
+        };
+        motionFrame.current = requestAnimationFrame(tick);
+      } catch (err) {
+        console.error('tapArrow failed', err);
+        animatingRef.current = false;
+        setMotion(null);
+        toast.error('Something went wrong — try again');
+      }
     },
     [screen, lives, level.cols, level.rows, levelIndex, unlocked]
   );
@@ -194,35 +235,49 @@ export default function App() {
     toast.success('Lives refilled');
   };
 
+  const hardLevel = difficultyLabel(level.cols) === 'Hard';
+
   return (
     <div className="app-shell min-h-screen text-white flex flex-col items-center pb-24">
       {splash && (
         <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-[#2a1050] cursor-pointer"
-          onPointerDown={() => setSplash(false)}
+          className="fixed inset-0 z-[80] flex flex-col items-center justify-center bg-[#050814] cursor-pointer"
+          onPointerDown={() => {
+            setSplash(false);
+            resumeBgm();
+          }}
           role="button"
           aria-label="Tap to continue"
         >
-          <img src="/logo.png" alt="Path Arrows" className="w-64 h-64 rounded-3xl object-cover shadow-2xl" />
+          <img
+            src="/logo.png"
+            alt="Path Arrows"
+            className="w-64 h-64 rounded-3xl object-cover shadow-neon border border-sky/40"
+          />
+          <p className="mt-6 text-sm font-bold tracking-[0.2em] text-sky uppercase title-neon">Follow the arrows</p>
         </div>
       )}
       <Toaster richColors position="top-center" />
       <header className="w-full max-w-md px-4 pt-10 pb-2 flex items-center justify-between">
         <button
           type="button"
-          className="h-10 w-10 rounded-full bg-white/90 shadow-sm flex items-center justify-center"
+          className="h-10 w-10 rounded-full btn-neon flex items-center justify-center"
           onClick={() => setScreen('home')}
           aria-label="Home"
         >
           <ChevronLeft className="h-5 w-5 text-sky" />
         </button>
         <div className="text-center">
-          <h1 className="text-2xl font-black tracking-tight text-white drop-shadow-md">Path Arrows</h1>
-          {screen !== 'home' && <p className="text-sm font-semibold text-sky-300">Level {level.id}</p>}
+          <h1 className="text-2xl font-black tracking-tight text-white title-neon">Path Arrows</h1>
+          {screen !== 'home' && (
+            <p className={cn('text-sm font-semibold', hardLevel ? 'text-hard' : 'text-sky')}>
+              Level {level.id}
+            </p>
+          )}
         </div>
         <button
           type="button"
-          className="h-10 w-10 rounded-full bg-white/90 shadow-sm flex items-center justify-center"
+          className="h-10 w-10 rounded-full btn-neon flex items-center justify-center"
           aria-label="Settings"
           onClick={() => setSettingsOpen(true)}
         >
@@ -232,21 +287,30 @@ export default function App() {
 
       {screen === 'home' && (
         <main className="w-full max-w-md px-5 mt-4">
-          <img src="/logo.png" alt="Path Arrows" className="w-40 h-40 mx-auto mb-4 rounded-3xl shadow-lg object-cover" />
-          <p className="text-center text-sm text-ink/80 mb-6 bg-white/80 rounded-2xl px-4 py-3 font-medium">
+          <img
+            src="/logo.png"
+            alt="Path Arrows"
+            className="w-40 h-40 mx-auto mb-4 rounded-3xl object-cover shadow-neon border border-sky/30"
+          />
+          <p className="text-center text-sm text-sky-100/90 mb-6 chip-neon rounded-2xl px-4 py-3 font-medium">
             Tap an arrow only when its path is clear. Clear the board to win.
           </p>
           <div className="grid grid-cols-5 gap-2">
             {LEVELS.map((lvl, i) => {
               const locked = i + 1 > unlocked;
+              const hard = difficultyLabel(lvl.cols) === 'Hard';
               return (
                 <button
                   key={lvl.id}
                   disabled={locked}
                   onClick={() => startLevel(i)}
                   className={cn(
-                    'aspect-square rounded-2xl font-black text-sm shadow-sm',
-                    locked ? 'bg-white/50 text-slate-400' : 'bg-white/90 text-ink active:scale-95'
+                    'aspect-square rounded-2xl font-black text-sm border transition active:scale-95',
+                    locked
+                      ? 'bg-slate-900/50 text-slate-500 border-slate-700'
+                      : hard
+                        ? 'bg-slate-900/80 text-hard border-hard/50 shadow-neon-hard'
+                        : 'bg-slate-900/80 text-sky border-sky/40 shadow-neon'
                   )}
                 >
                   {lvl.id}
@@ -260,16 +324,24 @@ export default function App() {
       {screen !== 'home' && (
         <>
           <div className="w-full max-w-[34rem] px-5 flex items-center justify-between mt-2">
-            <span className="text-sm font-bold bg-white/90 rounded-full px-3 py-1 shadow-sm flex items-center gap-1.5 text-slate-600">
-              <Send className="h-3.5 w-3.5" />
+            <span className="text-sm font-bold chip-neon rounded-full px-3 py-1 flex items-center gap-1.5">
+              <Send className="h-3.5 w-3.5 text-sky" />
               {arrows.length}
             </span>
             <div className="flex gap-1">
               {Array.from({ length: LIVES }).map((_, i) => (
-                <Heart key={i} className={cn('h-5 w-5', i < lives ? 'fill-red-500 text-red-500' : 'text-slate-300')} />
+                <Heart
+                  key={i}
+                  className={cn('h-5 w-5', i < lives ? 'fill-hard text-hard drop-shadow-[0_0_6px_rgba(251,113,133,0.8)]' : 'text-slate-600')}
+                />
               ))}
             </div>
-            <span className="text-sm font-bold bg-white/90 rounded-full px-3 py-1 shadow-sm text-slate-600">
+            <span
+              className={cn(
+                'text-sm font-bold chip-neon rounded-full px-3 py-1',
+                hardLevel && 'border-hard/50 text-hard shadow-neon-hard'
+              )}
+            >
               {difficultyLabel(level.cols)}
             </span>
           </div>
@@ -281,6 +353,7 @@ export default function App() {
               arrows={arrows}
               hintId={hintId}
               motion={motion}
+              hard={hardLevel}
               animatingRef={animatingRef}
               onTap={tapArrow}
             />
@@ -290,17 +363,17 @@ export default function App() {
             <button
               type="button"
               onClick={useHint}
-              className="relative h-[72px] w-[72px] rounded-full bg-white shadow-lg border-[3px] border-sky flex items-center justify-center"
+              className="relative h-[72px] w-[72px] rounded-full btn-neon flex items-center justify-center"
             >
-              <Lightbulb className="h-8 w-8 text-amber-400 fill-amber-300" />
-              <span className="absolute -top-1 -right-1 h-6 min-w-6 px-1 rounded-full bg-sky text-white text-xs font-black flex items-center justify-center">
+              <Lightbulb className="h-8 w-8 text-amber-300 fill-amber-300/80 drop-shadow-[0_0_8px_rgba(251,191,36,0.8)]" />
+              <span className="absolute -top-1 -right-1 h-6 min-w-6 px-1 rounded-full bg-sky text-slate-950 text-xs font-black flex items-center justify-center shadow-neon">
                 {hints}
               </span>
             </button>
             <button
               type="button"
               onClick={() => startLevel(levelIndex)}
-              className="h-14 w-14 rounded-full bg-white shadow-lg flex items-center justify-center"
+              className="h-14 w-14 rounded-full btn-neon flex items-center justify-center"
               aria-label="Reset level"
             >
               <RotateCcw className="h-6 w-6 text-sky" />
@@ -333,12 +406,23 @@ export default function App() {
       )}
 
       {settingsOpen && (
-        <div className="fixed inset-0 z-50 bg-ink/50 flex items-end justify-center" onClick={() => setSettingsOpen(false)}>
-          <div className="w-full max-w-md bg-white rounded-t-3xl p-6" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-xl font-black mb-4">Settings</h2>
-            <a className="block font-semibold text-sky py-2" href="/privacy.html">Privacy</a>
-            <a className="block font-semibold text-sky py-2" href="/terms.html">Terms</a>
-            <button type="button" className="mt-4 w-full bg-sky text-white font-black py-3 rounded-full" onClick={() => setSettingsOpen(false)}>
+        <div className="fixed inset-0 z-50 bg-black/70 flex items-end justify-center" onClick={() => setSettingsOpen(false)}>
+          <div
+            className="w-full max-w-md rounded-t-3xl p-6 border border-sky/30 bg-slate-950/95 shadow-neon"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-xl font-black mb-4 title-neon">Settings</h2>
+            <a className="block font-semibold text-sky py-2" href="/privacy.html">
+              Privacy
+            </a>
+            <a className="block font-semibold text-sky py-2" href="/terms.html">
+              Terms
+            </a>
+            <button
+              type="button"
+              className="mt-4 w-full bg-sky text-slate-950 font-black py-3 rounded-full shadow-neon"
+              onClick={() => setSettingsOpen(false)}
+            >
               Close
             </button>
           </div>
@@ -362,12 +446,16 @@ function Overlay({
   onSecondary: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 bg-sky/90 flex flex-col items-center justify-center p-8 text-white">
-      <h2 className="text-3xl font-black mb-8">{title}</h2>
-      <button type="button" onClick={onAction} className="w-full max-w-xs bg-white text-sky font-black py-4 rounded-full">
+    <div className="fixed inset-0 z-50 bg-slate-950/90 flex flex-col items-center justify-center p-8 text-white backdrop-blur-sm">
+      <h2 className="text-3xl font-black mb-8 title-neon">{title}</h2>
+      <button
+        type="button"
+        onClick={onAction}
+        className="w-full max-w-xs bg-sky text-slate-950 font-black py-4 rounded-full shadow-neon"
+      >
         {action}
       </button>
-      <button type="button" onClick={onSecondary} className="mt-4 font-bold underline">
+      <button type="button" onClick={onSecondary} className="mt-4 font-bold text-sky underline">
         {secondary}
       </button>
     </div>
@@ -380,6 +468,7 @@ function Board({
   arrows,
   hintId,
   motion,
+  hard,
   animatingRef,
   onTap,
 }: {
@@ -388,6 +477,7 @@ function Board({
   arrows: Arrow[];
   hintId: number | null;
   motion: { id: number; arrow: Arrow; cells: { x: number; y: number }[] } | null;
+  hard: boolean;
   animatingRef: MutableRefObject<boolean>;
   onTap: (arrow: Arrow) => void;
 }) {
@@ -426,15 +516,23 @@ function Board({
   };
 
   return (
-    <div className="relative bg-white rounded-[1.75rem] shadow-md mx-auto p-2 sm:p-3 w-full max-w-[min(96vw,44rem)] overflow-visible">
+    <div className={cn('relative rounded-[1.75rem] mx-auto p-2 sm:p-3 w-full max-w-[min(96vw,44rem)] overflow-visible board-neon', hard && 'hard')}>
       <div
         ref={wrapRef}
-        className="relative w-full touch-manipulation cursor-pointer select-none overflow-visible"
+        className="relative w-full touch-manipulation cursor-pointer select-none overflow-visible rounded-2xl bg-slate-950/80"
         style={{ aspectRatio: `${cols} / ${rows}`, touchAction: 'manipulation' }}
         onPointerUp={handlePointerUp}
       >
         {cell > 0 && (
-          <ArrowPaths cols={cols} rows={rows} cell={cell} arrows={arrows} hintId={hintId} motion={motion} />
+          <ArrowPaths
+            cols={cols}
+            rows={rows}
+            cell={cell}
+            arrows={arrows}
+            hintId={hintId}
+            motion={motion}
+            hard={hard}
+          />
         )}
       </div>
     </div>

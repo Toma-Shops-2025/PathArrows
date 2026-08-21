@@ -7,6 +7,7 @@ declare global {
 }
 
 const BGM_ID = 'patharrows-bgm';
+// Android asset FS is case-sensitive — file must be promo.mp3 (not promo.MP3).
 const BGM_SRC = '/audio/promo.mp3';
 
 let owners = 0;

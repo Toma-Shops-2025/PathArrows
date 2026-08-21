@@ -1,7 +1,11 @@
 import { cellsOf, D, type Arrow } from '@/lib/engine';
 
-const INK = '#1a4a8c';
-const HINT = '#3b82f6';
+const NEON = '#7dd3fc';
+const NEON_CORE = '#e0f2fe';
+const HINT = '#fbbf24';
+const HINT_CORE = '#fef3c7';
+const HARD = '#fb7185';
+const HARD_CORE = '#fecdd3';
 
 function polyline(cells: { x: number; y: number }[], cell: number) {
   if (cells.length === 0) return '';
@@ -37,10 +41,12 @@ function renderArrowPath(
   stroke: number,
   head: number,
   hinted: boolean,
+  hard: boolean,
   key?: string | number
 ) {
   if (cells.length < 1) return null;
-  const color = hinted ? HINT : INK;
+  const glow = hinted ? HINT : hard ? HARD : NEON;
+  const core = hinted ? HINT_CORE : hard ? HARD_CORE : NEON_CORE;
   const tip = cells[cells.length - 1];
   const tx = (tip.x + 0.5) * cell;
   const ty = (tip.y + 0.5) * cell;
@@ -54,14 +60,22 @@ function renderArrowPath(
         })()
       : trimPathForHead(cells, cell, arrow.dir);
 
+  const headPts = `${head * 0.55},0 ${-head * 0.34},${-head * 0.38} ${-head * 0.34},${head * 0.38}`;
+
+  // Two strokes only — triple-path + filters OOM Android WebView after a few clears.
   return (
     <g key={key ?? arrow.id}>
-      <path d={d} fill="none" stroke={color} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" />
-      <polygon
-        points={`${head * 0.55},0 ${-head * 0.34},${-head * 0.38} ${-head * 0.34},${head * 0.38}`}
-        transform={`translate(${tx} ${ty}) rotate(${angle})`}
-        fill={color}
+      <path d={d} fill="none" stroke={glow} strokeWidth={stroke} strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d={d}
+        fill="none"
+        stroke={core}
+        strokeWidth={Math.max(2, stroke * 0.38)}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
+      <polygon points={headPts} transform={`translate(${tx} ${ty}) rotate(${angle})`} fill={glow} />
+      <polygon points={headPts} transform={`translate(${tx} ${ty}) rotate(${angle}) scale(0.7)`} fill={core} />
     </g>
   );
 }
@@ -73,6 +87,7 @@ export function ArrowPaths({
   arrows,
   hintId,
   motion,
+  hard = false,
 }: {
   cols: number;
   rows: number;
@@ -80,11 +95,11 @@ export function ArrowPaths({
   arrows: Arrow[];
   hintId: number | null;
   motion: { id: number; arrow: Arrow; cells: { x: number; y: number }[] } | null;
+  hard?: boolean;
 }) {
   const stroke = Math.max(4, cell * 0.22);
   const head = cell * 0.48;
-  // Extra SVG margin so arrows stay visible while they sliver off every edge.
-  const pad = cell * 3;
+  const pad = cell * 1.25;
   const width = cols * cell;
   const height = rows * cell;
 
@@ -99,10 +114,21 @@ export function ArrowPaths({
       <g transform={`translate(${pad}, ${pad})`}>
         {arrows
           .filter((arrow) => arrow.id !== motion?.id)
-          .map((arrow) => renderArrowPath(arrow, cellsOf(arrow), cell, stroke, head, hintId === arrow.id))}
+          .map((arrow) =>
+            renderArrowPath(arrow, cellsOf(arrow), cell, stroke, head, hintId === arrow.id, hard)
+          )}
         {motion &&
           motion.cells.length > 0 &&
-          renderArrowPath(motion.arrow, motion.cells, cell, stroke, head, hintId === motion.id, `motion-${motion.id}`)}
+          renderArrowPath(
+            motion.arrow,
+            motion.cells,
+            cell,
+            stroke,
+            head,
+            hintId === motion.id,
+            hard,
+            `motion-${motion.id}`
+          )}
       </g>
     </svg>
   );
