@@ -92,7 +92,8 @@ export function unwindTrack(arrow: Arrow, cols: number, rows: number): { x: numb
 export function unwindSlice(
   track: { x: number; y: number }[],
   bodyLength: number,
-  progress: number
+  progress: number,
+  maxSamples = 24
 ): { x: number; y: number }[] {
   if (track.length === 0) return [];
   const p = Math.max(0, Math.min(1, progress));
@@ -116,7 +117,8 @@ export function unwindSlice(
   }
 
   const span = tip - tail;
-  const samples = Math.max(2, Math.min(24, Math.ceil(span) + 2));
+  const sampleCap = Math.max(4, Math.min(maxSamples, 24));
+  const samples = Math.max(2, Math.min(sampleCap, Math.ceil(span) + 2));
   const pts: { x: number; y: number }[] = [];
   for (let i = 0; i < samples; i++) {
     const t = tail + (span * i) / (samples - 1);

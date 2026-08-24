@@ -11,8 +11,8 @@ import { cn } from '@/lib/utils';
 
 const LIVES = 3;
 const STORAGE_KEY = 'patharrows-progress';
-/** Per-frame SVG unwind OOM/crashes Android WebView after a handful of clears. */
-const LITE_MOTION = Capacitor.isNativePlatform();
+/** Native WebView: keep snake unwind, but fewer SVG rebuilds so it stays stable. */
+const NATIVE = Capacitor.isNativePlatform();
 
 function difficultyLabel(cols: number) {
   if (cols <= 10) return 'Easy';
@@ -145,17 +145,14 @@ export default function App() {
           }
         };
 
-        // Native: instant clear — no RAF/SVG rebuild loop (that was crashing mid-level).
-        if (LITE_MOTION) {
-          animatingRef.current = true;
-          setArrows(others);
-          motionSafety.current = window.setTimeout(finishClear, 120);
-          return;
-        }
-
         const body = cellsOf(arrow);
         const track = unwindTrack(arrow, level.cols, level.rows);
-        const duration = Math.min(1400, Math.max(450, body.length * 70 + Math.max(level.cols, level.rows) * 22));
+        // Native: snappier crawl + fewer path samples / setState ticks (avoids WebView OOM).
+        const duration = NATIVE
+          ? Math.min(720, Math.max(280, body.length * 42 + Math.max(level.cols, level.rows) * 14))
+          : Math.min(1400, Math.max(450, body.length * 70 + Math.max(level.cols, level.rows) * 22));
+        const frameSkip = NATIVE ? 4 : 2;
+        const maxSamples = NATIVE ? 10 : 24;
         const start = performance.now();
         const session = motionSession.current + 1;
         motionSession.current = session;
@@ -182,13 +179,14 @@ export default function App() {
         const tick = (now: number) => {
           if (session !== motionSession.current) return;
           const t = Math.min(1, (now - start) / duration);
-          const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+          // Ease-in then accelerate out — reads like a snake shooting off the board.
+          const eased = t * t * (3 - 2 * t);
           frame += 1;
-          if (frame % 3 === 0 || t >= 1) {
+          if (frame % frameSkip === 0 || t >= 1) {
             setMotion({
               id: arrow.id,
               arrow,
-              cells: unwindSlice(track, body.length, eased),
+              cells: unwindSlice(track, body.length, eased, maxSamples),
             });
           }
           if (t < 1) {
