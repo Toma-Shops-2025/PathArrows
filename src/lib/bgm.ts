@@ -1,3 +1,54 @@
+const VOL_KEY = 'patharrows_volume';
+const MUTE_KEY = 'patharrows_muted';
+export const DEFAULT_VOLUME = 0.25;
+
+const listeners = new Set<() => void>();
+
+export function readVolumeSettings() {
+  if (typeof window === 'undefined') return { volume: DEFAULT_VOLUME, muted: false };
+  const raw = localStorage.getItem(VOL_KEY);
+  const parsed = raw != null ? parseFloat(raw) : DEFAULT_VOLUME;
+  return {
+    volume: Number.isNaN(parsed) ? DEFAULT_VOLUME : Math.min(1, Math.max(0, parsed)),
+    muted: localStorage.getItem(MUTE_KEY) === '1',
+  };
+}
+
+export function getEffectiveVolume() {
+  const { volume, muted } = readVolumeSettings();
+  return muted ? 0 : volume;
+}
+
+export function setVolume(v: number) {
+  localStorage.setItem(VOL_KEY, String(Math.min(1, Math.max(0, v))));
+  applyToRegistered();
+  listeners.forEach((fn) => fn());
+}
+
+export function setMuted(m: boolean) {
+  localStorage.setItem(MUTE_KEY, m ? '1' : '0');
+  applyToRegistered();
+  listeners.forEach((fn) => fn());
+}
+
+export function subscribeVolume(fn: () => void) {
+  listeners.add(fn);
+  return () => listeners.delete(fn);
+}
+
+function applyToRegistered() {
+  if (typeof window === 'undefined') return;
+  const main = document.getElementById(BGM_ID) as HTMLAudioElement | null;
+  if (main) applyEl(main);
+  if (window.__pathArrowsBgm) applyEl(window.__pathArrowsBgm);
+}
+
+function applyEl(el: HTMLAudioElement) {
+  const { volume, muted } = readVolumeSettings();
+  el.muted = muted;
+  el.volume = muted ? 0 : volume;
+}
+
 declare global {
   interface Window {
     __pathArrowsBgm?: HTMLAudioElement;
@@ -7,7 +58,6 @@ declare global {
 }
 
 const BGM_ID = 'patharrows-bgm';
-// Android asset FS is case-sensitive — file must be promo.mp3 (not promo.MP3).
 const BGM_SRC = '/audio/promo.mp3';
 
 let owners = 0;
@@ -23,7 +73,6 @@ function isPromoSrc(src: string) {
   return /promo\.mp3/i.test(src);
 }
 
-/** Stop detached/orphan promo players only — never strip the main element. */
 function silenceOrphans() {
   for (const el of pool()) {
     const main = typeof document !== 'undefined' ? document.getElementById(BGM_ID) : null;
@@ -61,7 +110,7 @@ function getBgm(): HTMLAudioElement | null {
     el.src = BGM_SRC;
   }
   el.loop = true;
-  el.volume = 0.35;
+  applyEl(el);
   window.__pathArrowsBgm = el;
   pool().add(el);
   return el;
@@ -104,7 +153,6 @@ function installGlobalHooks() {
   });
 }
 
-/** Call once when the app mounts. Returns a cleanup for unmount. */
 export function acquireBgm() {
   installGlobalHooks();
   silenceOrphans();

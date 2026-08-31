@@ -7,6 +7,7 @@ import { cellsOf, firstHint, isClear, pickArrowAt, unwindSlice, unwindTrack, typ
 import { initAds, setBannerVisible, showInterstitial, showRewardedAd } from '@/lib/ads';
 import { ArrowPaths } from '@/components/ArrowPaths';
 import { acquireBgm, resumeBgm } from '@/lib/bgm';
+import { VolumeBar } from '@/components/VolumeBar';
 import { cn } from '@/lib/utils';
 
 const LIVES = 3;
@@ -426,6 +427,8 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <VolumeBar className="bottom-4" />
     </div>
   );
 }
