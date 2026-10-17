@@ -9,6 +9,14 @@ html, body, #root {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Capacitor SystemBars (`insetsHandling: css`) + viewport-fit=cover */
+:root {
+  --pa-safe-top: var(--safe-area-inset-top, env(safe-area-inset-top, 0px));
+  --pa-safe-right: var(--safe-area-inset-right, env(safe-area-inset-right, 0px));
+  --pa-safe-bottom: var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px));
+  --pa-safe-left: var(--safe-area-inset-left, env(safe-area-inset-left, 0px));
+}
+
 body {
   background-color: #050814;
   background-image:
@@ -29,7 +37,18 @@ body.pa-playing {
 
 .app-shell {
   min-height: 100vh;
+  min-height: 100dvh;
+  padding-left: var(--pa-safe-left);
+  padding-right: var(--pa-safe-right);
   background: linear-gradient(180deg, rgba(5, 8, 20, 0.35) 0%, rgba(5, 8, 20, 0.72) 100%);
+}
+
+.safe-area-top {
+  padding-top: calc(2.5rem + var(--pa-safe-top));
+}
+
+.safe-area-bottom {
+  bottom: calc(1rem + var(--pa-safe-bottom));
 }
 
 .board-neon {
