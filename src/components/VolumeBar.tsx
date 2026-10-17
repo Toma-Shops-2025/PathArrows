@@ -2,7 +2,7 @@ import { Volume2, VolumeX } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { readVolumeSettings, setMuted, setVolume, subscribeVolume } from '@/lib/bgm';
 
-export function VolumeBar({ className = 'bottom-4' }: { className?: string }) {
+export function VolumeBar({ className = 'safe-area-bottom' }: { className?: string }) {
   const [volume, setVol] = useState(() => readVolumeSettings().volume);
   const [isMuted, setIsMuted] = useState(() => readVolumeSettings().muted);
 

@@ -257,7 +257,7 @@ export default function App() {
         </div>
       )}
       <Toaster richColors position="top-center" />
-      <header className="w-full max-w-md px-4 pt-10 pb-2 flex items-center justify-between">
+      <header className="w-full max-w-md px-4 safe-area-top pb-2 flex items-center justify-between">
         <button
           type="button"
           className="h-10 w-10 rounded-full btn-neon flex items-center justify-center"
@@ -428,7 +428,7 @@ export default function App() {
         </div>
       )}
 
-      <VolumeBar className="bottom-4" />
+      <VolumeBar className="safe-area-bottom" />
     </div>
   );
 }
